@@ -9,11 +9,11 @@ Rules: audit first and change nothing. Never print secret values or use any cred
 1. Check: test/dev/preview configs (.env*, test setup, docker-compose, DB config) pointing at a non-local or production DB, especially if tests drop, truncate, reset or migrate it.
 Fix: point tests at a local or container DB, and add a guard in test setup that aborts if the DB host isn't local.
 
-2. Check: production or broad-scope credentials my shell can read (env var names, ~/.aws, ~/.kube, ~/.config/gcloud, ~/.netrc, ~/.pgpass, gh/npm/cloud CLI tokens, keys in the repo, live payment keys). Is the default context production?
+2. Check: production or broad-scope credentials my shell can read (env var names, ~/.aws, ~/.kube, ~/.config/gcloud, ~/.netrc, ~/.pgpass, gh/npm/cloud CLI tokens, keys in the repo, live payment keys). Is the default context production? On Windows, also look in %APPDATA% (gcloud, GitHub CLI, wrangler), %USERPROFILE%\_netrc and Windows Credential Manager, where git and gh keep their tokens (list entry names with cmdkey /list).
 Fix: remove committed keys and add them to .gitignore. Manual: rotate any exposed key, move prod creds to an account this user can't read, make non-prod the default context.
 
-3. Check: recursive deletes whose target comes from a variable, glob or link (rm -rf "$VAR", rmtree, rimraf), scripts without set -u, symlinks/junctions in folders that get cleaned, tests that change HOME.
-Fix: use ${VAR:?} guards and set -euo pipefail, resolve with realpath and refuse targets outside the repo root, and add a dry-run that prints the target and file count.
+3. Check: recursive deletes whose target comes from a variable, glob or link (rm -rf "$VAR", rmtree, rimraf), scripts without set -u, symlinks/junctions in folders that get cleaned, tests that change HOME (USERPROFILE on Windows). On Windows, also look for Remove-Item -Recurse, rd /s and del /s, and PowerShell scripts without Set-StrictMode: Remove-Item "$dir\*" -Recurse with an empty $dir targets the root of the current drive.
+Fix: use ${VAR:?} guards and set -euo pipefail, resolve with realpath and refuse targets outside the repo root, and add a dry-run that prints the target and file count. In PowerShell, use Set-StrictMode -Version Latest and $ErrorActionPreference = 'Stop', throw if the target is empty, and resolve it with Resolve-Path.
 
 4. Check: infrastructure one command can destroy: DBs without deletion_protection/prevent_destroy, stray *.tfstate files, auto-approve/--force flags, backups the same token can delete.
 Fix: add deletion_protection/prevent_destroy to data resources and drop auto-approve from scripts. Manual: delete or archive stray state files, and store backups where the agent's token can't delete them.
@@ -24,7 +24,7 @@ Fix: back each rule with a real control (deny rule in agent settings, read-only 
 6. Check: is main protected? What scopes does my gh token have? Can it force-push, delete repos, or create public repos?
 Fix (manual): protect main with required reviews and no force-push, use a fine-grained token scoped to this repo, and block public repo creation in the org.
 
-7. Check: is this folder inside iCloud, Dropbox or OneDrive, and are there zero-byte or cloud-only placeholder files?
+7. Check: is this folder inside iCloud, Dropbox or OneDrive, and are there zero-byte or cloud-only placeholder files? On Windows, OneDrive backup can move Desktop and Documents into OneDrive: check where [Environment]::GetFolderPath('Desktop') and GetFolderPath('MyDocuments') point.
 Fix: move the repo out of synced folders (manual). In scripts, verify copy size and content before deleting a source, and prefer mv to copy-then-delete.
 
 8. Check: list every MCP config and flag unpinned servers (@latest, npx -y), hooks (SessionStart etc.), install scripts, skills, permission-bypass flags (--dangerously-skip-permissions, --yolo) and hidden Unicode in rule files.
@@ -33,7 +33,7 @@ Fix: pin server versions, remove unknown hooks, servers and skills, strip hidden
 9. Check: CI workflows that run an AI agent on untrusted input (issues, PR comments, pull_request_target) while it can see secrets or write access.
 Fix: set least-privilege permissions, keep secrets out of agent jobs, avoid pull_request_target for agents, and don't share caches with release jobs.
 
-10. Check: auto-approve or full-access agent modes, and safety nets agents don't load (e.g. an rm alias in .zshrc; test with bash -c 'type rm').
+10. Check: auto-approve or full-access agent modes, and safety nets agents don't load (e.g. an rm alias in .zshrc; test with bash -c 'type rm'). On Windows, rm is a PowerShell alias of Remove-Item, a guard in $PROFILE doesn't apply when the agent's shell runs with -NoProfile (test with powershell -NoProfile -Command Get-Command rm), and Remove-Item, rd /s and Git Bash rm -rf skip the Recycle Bin.
 Fix (manual): turn off bypass/auto-approve for destructive commands, sandbox the agent to the project dir, and put guards in scripts or agent deny rules instead of shell aliases.
 
 11. Check: tools that send money or messages without a cap, allowlist or confirmation.
